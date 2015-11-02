@@ -2,16 +2,19 @@ defmodule Pxblog.PostControllerTest do
   use Pxblog.ConnCase
 
   alias Pxblog.Post
-  alias Pxblog.User
+  alias Pxblog.TestHelper
 
   @valid_attrs %{body: "some content", title: "some content"}
   @invalid_attrs %{}
 
   setup do
-    {:ok, user} = create_user
-    conn = conn()
-    |> login_user(user)
-    {:ok, conn: conn, user: user}
+    {:ok, role} = TestHelper.create_role(%{name: "User Role", admin: false})
+    {:ok, user} = TestHelper.create_user(role, %{email: "test@test.com",
+      username: "test", password: "test", password_confirmation: "test"})
+    {:ok, post} = TestHelper.create_post(user, %{title: "Test Post",
+      body: "Test Body"})
+    conn = conn() |> login_user(user)
+    {:ok, conn: conn, user: user, role: role, post: post}
   end
 
   test "lists all entries on index", %{conn: conn, user: user} do
@@ -35,8 +38,7 @@ defmodule Pxblog.PostControllerTest do
     assert html_response(conn, 200) =~ "New post"
   end
 
-  test "shows chosen resource", %{conn: conn, user: user} do
-    post = build_post(user)
+  test "shows chosen resource", %{conn: conn, user: user, post: post} do
     conn = get conn, user_post_path(conn, :show, user, post)
     assert html_response(conn, 200) =~ "Show post"
   end
@@ -47,16 +49,14 @@ defmodule Pxblog.PostControllerTest do
     end
   end
 
-  test "renders form for editing chosen resource", %{conn: conn, user: user} do
-    post = build_post(user)
+  test "renders form for editing chosen resource", %{conn: conn, user: user, post: post} do
     conn = get conn, user_post_path(conn, :edit, user, post)
     assert html_response(conn, 200) =~ "Edit post"
   end
 
-  test "updates chosen resource and redirects when data is valid", %{conn: conn, user: user} do
+  test "updates chosen resource and redirects when data is valid", %{conn: conn, user: user, post: post} do
     new_attrs = %{@valid_attrs | body: "New body"}
 
-    post = build_post(user)
     conn = put conn, user_post_path(conn, :update, user, post), post: new_attrs
     assert redirected_to(conn) == user_post_path(conn, :show, user, post)
     assert get_flash(conn, :info) == "Post updated successfully."
@@ -64,15 +64,13 @@ defmodule Pxblog.PostControllerTest do
   end
 
   test "does not update chosen resource and renders errors when data is invalid",
-    %{conn: conn, user: user} do
-    post = build_post(user)
+    %{conn: conn, user: user, post: post} do
     conn = put conn, user_post_path(conn, :update, user, post), post: @invalid_attrs
     assert html_response(conn, 302)
     #assert html_response(conn, 302) =~ "Edit Post"
   end
 
-  test "deletes chosen resource", %{conn: conn, user: user} do
-    post = build_post(user)
+  test "deletes chosen resource", %{conn: conn, user: user, post: post} do
     conn = delete conn, user_post_path(conn, :delete, user, post)
     assert redirected_to(conn) == user_post_path(conn, :index, user)
     refute Repo.get(Post, post.id)
@@ -85,34 +83,19 @@ defmodule Pxblog.PostControllerTest do
     assert conn.halted
   end
 
-  test "redirects when trying to edit a post for a different user", %{conn: conn, user: user} do
-    other_user = User.changeset(%User{}, %{email: "test2@test.com", username: "test2",
+  test "redirects when trying to edit a post for a different user",
+    %{conn: conn, role: role, post: post} do
+    {:ok, other_user} = TestHelper.create_user(role, %{email: "test2@test.com", username: "test2",
       password: "test", password_confirmation: "test"})
-    |> Repo.insert!
 
-    post = build_post(user)
     conn = get conn, user_post_path(conn, :edit, other_user, post)
     assert get_flash(conn, :error) == "You are not authorized to modify that post!"
     assert redirected_to(conn) == page_path(conn, :index)
     assert conn.halted
   end
 
-  defp create_user do
-    User.changeset(%User{}, %{email: "test@test.com",
-      username: "test", password: "test", password_confirmation: "test"})
-    |> Repo.insert
-  end
-
   defp login_user(conn, user) do
     post conn, session_path(conn, :create), user: %{username: user.username,
       password: user.password}
-  end
-
-  defp build_post(user) do
-    changeset =
-      user
-      |> build(:posts)
-      |> Post.changeset(@valid_attrs)
-    Repo.insert!(changeset)
   end
 end

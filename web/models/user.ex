@@ -15,9 +15,10 @@ defmodule Pxblog.User do
     field :password_confirmation, :string, virtual: true
 
     has_many :posts, Pxblog.Post
+    belongs_to :role, Pxblog.Role
   end
 
-  @required_fields ~w(username email password password_confirmation)
+  @required_fields ~w(username email password password_confirmation role_id)
   @optional_fields ~w()
 
   @doc """
